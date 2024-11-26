@@ -1,3 +1,5 @@
+from utils.types import ChainData
+
 # Chain RPC URLs
 OPTIMISM_RPC_URL = "https://mainnet.optimism.io"
 MODE_RPC_URL = "https://mainnet.mode.network"
