@@ -30,15 +30,24 @@ minter_abi = '[{"inputs":[{"internalType":"address","name":"_voter","type":"addr
 
 root_pool_abi = '[{"inputs":[],"stateMutability":"nonpayable","type":"constructor"},{"inputs":[],"name":"AlreadyInitialized","type":"error"},{"inputs":[],"name":"chainid","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"factory","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"_chainid","type":"uint256"},{"internalType":"address","name":"_token0","type":"address"},{"internalType":"address","name":"_token1","type":"address"},{"internalType":"bool","name":"_stable","type":"bool"}],"name":"initialize","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"stable","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"token0","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"token1","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"}]'
 
+class PoolData:
+    def __init__(self, address: str):
+        self.address = address
+        self.voting_power = 0
+
+    def to_dict(self):
+        return {'address': self.address, 'voting_power': self.voting_power}
+
+    def __repr__(self):
+        return json.dumps(self.to_dict(), indent=4)
+
 class ChainData:
     def __init__(self, name: str):
         self.name = name
         self.pools = []
 
     def __repr__(self):
-        # Format Pools list via `json.dumps()`
-        pools_json: str = json.dumps(self.pools, indent=4)
-        return f"Name: {self.name}\nPools={pools_json}\n"
+        return f"Name: {self.name}\nPools={self.pools}\n"
 
 chains: dict[int, ChainData] = {
     34443: ChainData("Mode"),
@@ -81,19 +90,18 @@ def fetch_pools(log_info: bool = False):
     for pool in root_pools:
         root_pool = web3.eth.contract(address=pool, abi=root_pool_abi)
         chainid = root_pool.functions.chainid().call()
-        chains[chainid].pools.append(pool)
+        chains[chainid].pools.append(PoolData(pool))
     if (log_info):
         print_chain_info()
 
 
-def fetch_voting_weights():
-    i = 0
-    for list_of_root_pools_by_chain in root_pools_by_chain:
-        for pool in list_of_root_pools_by_chain:
-            weight = voter.weights(pool)
-            weights_by_chain[i] += weight
-            total_voting_superchain += weight
-        i += 1
+def fetch_voting_weights(log_info = False):
+    for chain_id, chain_data in chains.items():
+        for pool in chain_data.pools:
+            pool.voting_power = voter.functions.weights(pool.address).call()
+
+    if (log_info):
+        print_chain_info()
 
 def fetch_existing_buffers():
     i = 0
