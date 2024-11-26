@@ -1,4 +1,5 @@
 from web3 import Web3
+import json
 
 OPTIMISM_RPC_URL = "https://mainnet.optimism.io"
 web3 = Web3(Web3.HTTPProvider(OPTIMISM_RPC_URL))
@@ -6,14 +7,14 @@ web3 = Web3(Web3.HTTPProvider(OPTIMISM_RPC_URL))
 rpc_urls = ["https://mainnet.mode.network", "https://rpc.api.lisk.com", "https://rpc.frax.com"]
 
 ROOT_POOL_FACTORY_ADDRESS = "0x31832f2a97Fd20664D76Cc421207669b55CE4BC0"
-CL_ROOT_POOL_FACTORY_ADDRESS = "0xCLRootPoolFactoryAddress"
+CL_ROOT_POOL_FACTORY_ADDRESS = "0x04625B046C69577EfC40e6c0Bb83CDBAfab5a55F"
 VOTER_ADDRESS = "0x41C914ee0c7E1A5edCD0295623e6dC557B5aBf3C"
 VOTING_ESCROW = "0xFAf8FD17D9840595845582fCB047DF13f006787d"
 XERC20 = "0x7f9AdFbd38b669F03d1d11000Bc76b9AaEA28A81"
 MINTER = "0x6dc9E1C04eE59ed3531d73a72256C0da46D10982"
 MESSAGE_MODULE = "0xF385603a12Be8b7B885222329c581FDD1C30071D"
 
-ABI_PATH = "./abi/"  
+ABI_PATH = "./abi/"
 
 # Load ABIs
 def load_abi(file_path):
@@ -29,8 +30,27 @@ minter_abi = '[{"inputs":[{"internalType":"address","name":"_voter","type":"addr
 
 root_pool_abi = '[{"inputs":[],"stateMutability":"nonpayable","type":"constructor"},{"inputs":[],"name":"AlreadyInitialized","type":"error"},{"inputs":[],"name":"chainid","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"factory","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"_chainid","type":"uint256"},{"internalType":"address","name":"_token0","type":"address"},{"internalType":"address","name":"_token1","type":"address"},{"internalType":"bool","name":"_stable","type":"bool"}],"name":"initialize","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"stable","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"token0","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"token1","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"}]'
 
-chains = [34443, 1135, 252]
-chain_names = ["Mode", "Lisk", "Fraxtal"]
+class ChainData:
+    def __init__(self, name: str):
+        self.name = name
+        self.pools = []
+
+    def __repr__(self):
+        # Format Pools list via `json.dumps()`
+        pools_json: str = json.dumps(self.pools, indent=4)
+        return f"Name: {self.name}\nPools={pools_json}\n"
+
+chains: dict[int, ChainData] = {
+    34443: ChainData("Mode"),
+    1135: ChainData("Lisk"),
+    252: ChainData("Fraxtal"),
+}
+
+root_pool_factory = web3.eth.contract(address=ROOT_POOL_FACTORY_ADDRESS, abi=root_pool_factory_abi)
+cl_root_pool_factory = web3.eth.contract(address=CL_ROOT_POOL_FACTORY_ADDRESS, abi=cl_root_pool_factory_abi)
+voter = web3.eth.contract(address=VOTER_ADDRESS, abi=voter_abi)
+voting_escrow = web3.eth.contract(address=VOTING_ESCROW, abi=voting_escrow_abi)
+minter = web3.eth.contract(address=MINTER, abi=voting_escrow_abi)
 
 root_pools = []
 root_pools_by_chain = []
@@ -41,21 +61,29 @@ total_voting_superchain = 0
 existing_buffer_caps_by_chain = []
 existing_rate_limits_by_chain = []
 
-def fetch_pools():
+def print_chain_info():
+    for chain_id, chain_data in chains.items():
+        print(f"Chain ID: {chain_id}")
+        print(chain_data)
+        print("-" * 40)  # Divider for clarity
+
+def fetch_pools(log_info: bool = False):
     # fetch v2 superchain pools
-    root_pools = root_pool_factory.allPools();
+    root_pools = root_pool_factory.functions.allPools().call();
 
     # fetch cl superchain pools
-    cl_root_pools = cl_root_pool_factory.allPools();
+    cl_root_pools = cl_root_pool_factory.functions.allPools().call();
 
-    for pool in cl_root_pools:
-        root_pools.append(pool)
+    # concatenate pool lists
+    root_pools.extend(cl_root_pools)
 
     # organize by chainid
     for pool in root_pools:
         root_pool = web3.eth.contract(address=pool, abi=root_pool_abi)
-        chain = root_pool.chain()
-        root_pools_by_chain[chains.index(chain)].append(pool.address)
+        chainid = root_pool.functions.chainid().call()
+        chains[chainid].pools.append(pool)
+    if (log_info):
+        print_chain_info()
 
 
 def fetch_voting_weights():
@@ -63,8 +91,8 @@ def fetch_voting_weights():
     for list_of_root_pools_by_chain in root_pools_by_chain:
         for pool in list_of_root_pools_by_chain:
             weight = voter.weights(pool)
-            weights_by_chain[i] += weight 
-            total_voting_superchain += weight 
+            weights_by_chain[i] += weight
+            total_voting_superchain += weight
         i += 1
 
 def fetch_existing_buffers():
@@ -79,12 +107,6 @@ def fetch_existing_buffers():
 
 # Main function
 def main():
-    root_pool_factory = web3.eth.contract(address=ROOT_POOL_FACTORY_ADDRESS, abi=root_pool_factory_abi)
-    cl_root_pool_factory = web3.eth.contract(address=CL_ROOT_POOL_FACTORY_ADDRESS, abi=cl_root_pool_factory_abi)
-    voter = web3.eth.contract(address=VOTER_ADDRESS, abi=voter_abi)
-    voting_escrow = web3.eth.contract(address=VOTING_ESCROW, abi=voting_escrow_abi)
-    minter = web3.eth.contract(address=MINTER, abi=voting_escrow_abi)
-
     # Fetch pools and organize by chain
     fetch_pools()
 
