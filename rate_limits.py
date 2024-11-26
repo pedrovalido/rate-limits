@@ -66,7 +66,7 @@ root_pool_factory = web3.eth.contract(address=ROOT_POOL_FACTORY_ADDRESS, abi=roo
 cl_root_pool_factory = web3.eth.contract(address=CL_ROOT_POOL_FACTORY_ADDRESS, abi=cl_root_pool_factory_abi)
 voter = web3.eth.contract(address=VOTER_ADDRESS, abi=voter_abi)
 voting_escrow = web3.eth.contract(address=VOTING_ESCROW, abi=voting_escrow_abi)
-minter = web3.eth.contract(address=MINTER, abi=voting_escrow_abi)
+minter = web3.eth.contract(address=MINTER, abi=minter_abi)
 
 root_pools = []
 root_pools_by_chain = []
@@ -78,7 +78,7 @@ existing_buffer_caps_by_chain = []
 existing_rate_limits_by_chain = []
 
 def print_chain_info():
-    print(f"Total Superchain Votes: {total_voting_superchain}")
+    print("-" * 40)
     for chain_id, chain_data in chains.items():
         print(f"Chain ID: {chain_id}")
         print(chain_data)
@@ -135,10 +135,13 @@ def main():
     fetch_existing_buffers()
 
     # total voting power at current timestamp
-    total_voting_weight = voting_escrow.totalSupply()
+    total_voting_weight = voting_escrow.functions.totalSupply().call()
+    # estimated weekly emissions for next epoch
+    weekly = minter.functions.weekly().call()
 
     # Compare voting weights with total supply
     print(f"Total Voting Power: {total_voting_weight}")
+    print(f"Total Superchain Votes: {total_voting_superchain}")
 
     pring(f"Total Voting Superchain: {total_voting_superchain}")
 
