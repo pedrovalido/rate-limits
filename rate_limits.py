@@ -2,6 +2,9 @@ from web3 import Web3
 import json
 
 OPTIMISM_RPC_URL = "https://mainnet.optimism.io"
+MODE_RPC_URL = "https://mainnet.mode.network"
+LISK_RPC_URL = "https://rpc.api.lisk.com"
+FRAXTAL_RPC_URL = "https://rpc.frax.com"
 web3 = Web3(Web3.HTTPProvider(OPTIMISM_RPC_URL))
 
 rpc_urls = ["https://mainnet.mode.network", "https://rpc.api.lisk.com", "https://rpc.frax.com"]
@@ -42,17 +45,21 @@ class PoolData:
         return json.dumps(self.to_dict(), indent=4)
 
 class ChainData:
-    def __init__(self, name: str):
-        self.name = name
+    def __init__(self, name: str, rpc_url: str):
         self.pools = []
+        self.name = name
+        self.rpc_url = rpc_url
+        self.total_voting_weight = 0
+        self.existing_buffer_cap = 0
+        self.existing_rate_limit = 0
 
     def __repr__(self):
-        return f"Name: {self.name}\nPools={self.pools}\n"
+        return f"Name: {self.name}\nTotal Voting Weight: {self.total_voting_weight}\nExisting Buffer Cap: {self.existing_buffer_cap}\nExisting Rate Limit: {self.existing_rate_limit}\nPools={self.pools}\n"
 
 chains: dict[int, ChainData] = {
-    34443: ChainData("Mode"),
-    1135: ChainData("Lisk"),
-    252: ChainData("Fraxtal"),
+    34443: ChainData("Mode", MODE_RPC_URL),
+    1135: ChainData("Lisk", LISK_RPC_URL),
+    252: ChainData("Fraxtal", FRAXTAL_RPC_URL),
 }
 
 root_pool_factory = web3.eth.contract(address=ROOT_POOL_FACTORY_ADDRESS, abi=root_pool_factory_abi)
@@ -71,6 +78,7 @@ existing_buffer_caps_by_chain = []
 existing_rate_limits_by_chain = []
 
 def print_chain_info():
+    print(f"Total Superchain Votes: {total_voting_superchain}")
     for chain_id, chain_data in chains.items():
         print(f"Chain ID: {chain_id}")
         print(chain_data)
@@ -96,22 +104,25 @@ def fetch_pools(log_info: bool = False):
 
 
 def fetch_voting_weights(log_info = False):
+    global total_voting_superchain
     for chain_id, chain_data in chains.items():
         for pool in chain_data.pools:
             pool.voting_power = voter.functions.weights(pool.address).call()
+            chain_data.total_voting_weight += pool.voting_power
+        total_voting_superchain += chain_data.total_voting_weight
 
     if (log_info):
         print_chain_info()
 
-def fetch_existing_buffers():
-    i = 0
-    for rpc in rpc_urls:
-        web3_temp = Web3(Web3.HTTPProvider(rpc))
+def fetch_existing_buffers(log_info = False):
+    for chain_id, chain_data in chains.items():
+        web3_temp = Web3(Web3.HTTPProvider(chain_data.rpc_url))
         xerc20 = web3_temp.eth.contract(address=XERC20, abi=xerc20_abi)
-        # buffer cap
-        existing_buffer_caps_by_chain[i] = xerc20.bufferCap(message_module)
-        existing_rate_limits_by_chain[i] = xerc20.rateLimitPerSecond(message_module)
-        i += 1
+        chain_data.existing_buffer_cap = xerc20.functions.bufferCap(MESSAGE_MODULE).call()
+        chain_data.existing_rate_limit = xerc20.functions.rateLimitPerSecond(MESSAGE_MODULE).call()
+
+    if (log_info):
+        print_chain_info()
 
 # Main function
 def main():
