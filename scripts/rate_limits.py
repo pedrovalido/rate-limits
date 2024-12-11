@@ -27,6 +27,20 @@ def print_chain_info():
         print(chain_data)
         print("-" * 40)  # Divider for clarity
 
+def print_summary(chains: dict[int, ChainData]):
+    print("\n" + "=" * 40)
+    print("Limit Summary:")
+    print("=" * 40 + "\n")
+    for chain_id, chain_data in chains.items():
+        print(f"Chain ID: {chain_id}")
+        print(f"Name: {chain_data.name}")
+        if chain_id != 10:
+            print(f"Chain Voting Weight: {chain_data.total_voting_weight / 1e18:.0f}")
+        print(f"Expected Emissions: {chain_data.expected_emissions / 1e18:.0f}")
+        print(f"Existing Midpoint: {chain_data.existing_midpoint / 1e18:.0f}")
+        print(f"Existing Buffer Cap: {chain_data.existing_buffer_cap / 1e18:.0f}")
+        print("-" * 40 + "\n")
+
 def fetch_pools():
     # fetch v2 superchain pools
     root_pools = root_pool_factory.functions.allPools().call();
@@ -237,19 +251,15 @@ if __name__ == "__main__":
     new_chain_limits = main()
 
     if not new_chain_limits:
+        print_summary(chains)
+        print("=" * 40)
         print("No new limits required.")
-        print("-" * 40)
-        for chain_id, chain_data in chains.items():
-            print(f"Chain ID: {chain_id}")
-            print(f"Name: {chain_data.name}")
-            print(f"Chain Voting Weight: {chain_data.total_voting_weight / 1e18:.0f}")
-            print(f"Expected Emissions: {chain_data.expected_emissions / 1e18:.0f}")
-            print(f"Existing Midpoint: {chain_data.existing_midpoint / 1e18:.0f}")
-            print(f"Existing Buffer Cap: {chain_data.existing_buffer_cap / 1e18:.0f}")
-            print("-" * 40 + "\n")
+        print("=" * 40)
     else:
+        print_summary(chains)
+        print("=" * 40)
         print("WARNING: New Chain Limits required")
-        print("-" * 40)
+        print("=" * 40)
         for chain_id, chain_limits in new_chain_limits.items():
             print(f"Chain ID: {chain_id}")
             print(chain_limits)
